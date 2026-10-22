@@ -575,17 +575,17 @@ function drawWeather(s){
   const colW = W / n;
   const big = (n <= 3);
 
-  const labelSize = big ? 10.5 : 9.5;
-  const iconSize  = big ? 26 : 22;
-  const textSize  = big ? 12.5 : 11;
-  const tempSize  = big ? 14 : 12.5;
-  const lowSize   = big ? 11 : 10.5;
-  const padX      = big ? 10 : 6;
-  const textX     = big ? 30 : 25;
-  const labelY    = big ? 252 : 253;
-  const iconY     = big ? 256 : 256;
-  const textY     = big ? 268 : 267;
-  const tempY     = big ? 286 : 284;
+  const labelSize = big ? 11 : 10.5;
+  const iconSize  = big ? 26 : 24;
+  const textSize  = big ? 13 : 12.5;
+  const tempSize  = big ? 15 : 14;
+  const lowSize   = big ? 11.5 : 11.5;
+  const padX      = big ? 9 : 6;
+  const textX     = big ? 30 : 29;
+  const labelY    = big ? 251 : 251;
+  const iconY     = big ? 255 : 255;
+  const textY     = big ? 267 : 267;
+  const tempY     = big ? 287 : 287;
 
   for(let i = 0; i < n; i++){
     const d = s.days[i];
