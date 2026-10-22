@@ -68,6 +68,7 @@
       <button id="btnConnect">搜索并连接</button>
       <button id="btnLast" disabled>上次设备</button>
       <button id="btnDisconnect" disabled>断开</button>
+      <button id="btnDiag">诊断</button>
       <button id="btnSend" disabled>推送到屏幕</button>
       <button id="btnPng">下载 PNG</button>
       <button id="btnFwCal" disabled title="让价签用固件自带日历，日期会自己走">切回固件日历</button>
@@ -1048,6 +1049,28 @@ async function firmwareCalendar(){
   }
 }
 
+/* 一键诊断：把浏览器/来源/权限/连接状态摊开，方便判断是"没广播"还是"收不到" */
+async function diagnose(){
+  log('———— 诊断 ————');
+  log('来源：' + location.origin + '（' + (window.isSecureContext ? '安全上下文 ✓' : '非安全上下文 ✗ 必须 https 或 localhost') + '）');
+  log('Web Bluetooth：' + (navigator.bluetooth ? '支持 ✓' : '不支持 ✗（Firefox/Safari 都不支持）'));
+
+  if(navigator.bluetooth && navigator.bluetooth.getDevices){
+    try{
+      const ds = await navigator.bluetooth.getDevices();
+      log('已授权设备：' + ds.length + ' 台' +
+          (ds.length ? '（' + ds.map(d => (d.name || '未命名') + (d.gatt.connected ? '[已连]' : '')).join('、') + '）' : ''));
+    }catch(e){
+      log('读取已授权设备失败：' + e.message);
+    }
+  }else{
+    log('当前浏览器无法读取已授权设备列表');
+  }
+
+  log('当前连接：' + (rxChar ? '已连接 ' + ((device && device.name) || '') : '未连接'));
+  log('提示：如果「已授权设备」里有 5C43 但扫不到，说明它正被别的主机占用或已休眠');
+}
+
 /* 主动断开：BLE 同一时刻只允许一个主机连接，换设备前先在这里放手 */
 async function disconnectDevice(){
   try{
@@ -1196,6 +1219,7 @@ $('btnLast').onclick    = () => connectLast();
 $('btnDisconnect').onclick = () => disconnectDevice();
 $('btnSend').onclick    = () => pushToScreen();
 $('btnFwCal').onclick = () => firmwareCalendar();
+$('btnDiag').onclick = () => diagnose();
 $('btnPng').onclick = () => {
   const a = document.createElement('a');
   a.download = 'zkong-' + Date.now() + '.png';
