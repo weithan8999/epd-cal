@@ -274,15 +274,15 @@ async function fetchCaiyun(loc){
       max: Math.round(t.max), min: Math.round(t.min)
     });
   }
-  return { city: loc.name, days, src: '彩云' };
+  return days;
 }
 
-async function fetchOpenMeteo(loc){
+async function fetchOpenMeteo(loc, pastDays, forecastDays, labels){
   const u = 'https://api.open-meteo.com/v1/forecast' +
     '?latitude=' + loc.lat + '&longitude=' + loc.lon +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min' +
     '&hourly=weather_code' +
-    '&timezone=Asia%2FShanghai&forecast_days=3';
+    '&timezone=Asia%2FShanghai&past_days=' + pastDays + '&forecast_days=' + forecastDays;
   const r = await fetch(u);
   const j = await r.json();
   if(!j.daily) throw new Error('Open-Meteo 返回异常');
@@ -307,18 +307,19 @@ async function fetchOpenMeteo(loc){
   }
 
   const days = [];
-  for(let i = 0; i < 3; i++){
+  const n = Math.min(labels.length, j.daily.time.length);
+  for(let i = 0; i < n; i++){
     const code = dayCode(j.daily.time[i], j.daily.weather_code[i]);
     const meta = WMO[code] || ['—','cloud'];
     days.push({
-      label: ['今天','明天','后天'][i],
+      label: labels[i],
       date: +j.daily.time[i].slice(8, 10),
       text: meta[0], icon: meta[1],
       max: Math.round(j.daily.temperature_2m_max[i]),
       min: Math.round(j.daily.temperature_2m_min[i])
     });
   }
-  return { city: loc.name, days, src: 'Open-Meteo' };
+  return days;
 }
 
 async function fetchWeather(city){
@@ -332,13 +333,28 @@ async function fetchWeather(city){
     }
   }catch(e){}
 
-  let w = null;
-  if(CY_TOKEN){
-    try{ w = await fetchCaiyun(loc); }
-    catch(e){ log('彩云失败（' + e.message + '），改用 Open-Meteo'); }
-  }
-  if(!w) w = await fetchOpenMeteo(loc);
+  let days = null, src = '';
 
+  if(CY_TOKEN){
+    try{
+      const cy = await fetchCaiyun(loc);            // 今天/明天/后天
+      days = cy;
+      src = '彩云';
+      try{
+        const yd = await fetchOpenMeteo(loc, 1, 1, ['昨天']);   // 只要昨天
+        if(yd && yd.length){ days = [yd[0]].concat(cy); src = '彩云 + Open-Meteo'; }
+      }catch(e2){ log('昨天没取到（' + e2.message + '），只显示三天'); }
+    }catch(e){
+      log('彩云失败（' + e.message + '），全部改用 Open-Meteo');
+    }
+  }
+
+  if(!days){
+    days = await fetchOpenMeteo(loc, 1, 3, ['昨天','今天','明天','后天']);
+    src = 'Open-Meteo';
+  }
+
+  const w = { city: loc.name, days: days, src: src };
   try{ localStorage.setItem('zk.wx', JSON.stringify({ t: Date.now(), w: w })); }catch(e){}
   return w;
 }
@@ -555,34 +571,49 @@ function drawWeather(s){
   ctx.lineTo(390, STRIP_TOP + 0.5);
   ctx.stroke();
 
-  const colW = W / 3;
-  for(let i = 0; i < 3; i++){
+  const n = (s.days && s.days.length) ? s.days.length : 4;
+  const colW = W / n;
+  const big = (n <= 3);
+
+  const labelSize = big ? 10.5 : 9.5;
+  const iconSize  = big ? 26 : 22;
+  const textSize  = big ? 12.5 : 11;
+  const tempSize  = big ? 14 : 12.5;
+  const lowSize   = big ? 11 : 10.5;
+  const padX      = big ? 10 : 6;
+  const textX     = big ? 30 : 25;
+  const labelY    = big ? 252 : 253;
+  const iconY     = big ? 256 : 256;
+  const textY     = big ? 268 : 267;
+  const tempY     = big ? 286 : 284;
+
+  for(let i = 0; i < n; i++){
     const d = s.days[i];
     if(!d) continue;
-    const x0 = i * colW + 10;
+    const x0 = i * colW + padX;
 
     ctx.textAlign = 'left';
-    ctx.font = '10.5px ' + FONT;
-    ctx.fillStyle = i === 0 ? C.r : C.b;
-    ctx.fillText(d.label, x0, 252);
+    ctx.font = labelSize + 'px ' + FONT;
+    ctx.fillStyle = (d.label === '今天') ? C.r : C.b;
+    ctx.fillText(d.label, x0, labelY);
     const lw = ctx.measureText(d.label).width;
     ctx.fillStyle = C.b;
-    ctx.fillText(' ' + d.date + '日', x0 + lw, 252);
+    ctx.fillText(' ' + d.date + '日', x0 + lw, labelY);
 
-    drawIcon(d.icon, x0, 256, 26);
+    drawIcon(d.icon, x0, iconY, iconSize);
 
     ctx.fillStyle = C.b;
-    ctx.font = '12.5px ' + FONT;
-    ctx.fillText(d.text, x0 + 30, 268);
+    ctx.font = textSize + 'px ' + FONT;
+    ctx.fillText(d.text, x0 + textX, textY);
 
-    ctx.font = 'bold 14px ' + FONT;
+    ctx.font = 'bold ' + tempSize + 'px ' + FONT;
     ctx.fillStyle = C.r;
     const hi = d.max + '°';
-    ctx.fillText(hi, x0 + 30, 286);
+    ctx.fillText(hi, x0 + textX, tempY);
     const hw = ctx.measureText(hi).width;
     ctx.fillStyle = C.b;
-    ctx.font = '11px ' + FONT;
-    ctx.fillText('/' + d.min + '°', x0 + 30 + hw + 0.5, 286);
+    ctx.font = lowSize + 'px ' + FONT;
+    ctx.fillText('/' + d.min + '°', x0 + textX + hw + 0.5, tempY);
   }
 }
 /* ---- 图标：24 单位坐标系里画，再缩放 ---- */
@@ -1088,11 +1119,11 @@ function baseState(city){
 
 function mockDays(){
   const t = now();
-  const meta = [['多云','sunCloud'], ['小雨','rain'], ['晴','sun']];
-  const max = [22, 19, 24], min = [14, 12, 13];
-  return [0, 1, 2].map(i => {
-    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + i);
-    return { label: ['今天','明天','后天'][i], date: d.getDate(),
+  const meta = [['阴','cloud'], ['多云','sunCloud'], ['小雨','rain'], ['晴','sun']];
+  const max = [19, 22, 19, 24], min = [11, 14, 12, 13];
+  return [-1, 0, 1, 2].map((off, i) => {
+    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + off);
+    return { label: ['昨天','今天','明天','后天'][i], date: d.getDate(),
              text: meta[i][0], icon: meta[i][1], max: max[i], min: min[i] };
   });
 }
